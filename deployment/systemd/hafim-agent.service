@@ -1,0 +1,16 @@
+[Unit]
+Description=HA-FIM Host Filesystem Monitoring Inotify Agent
+After=network.target hafim-backend.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/hafim
+EnvironmentFile=/opt/hafim/.env
+ExecStart=/opt/hafim/venv/bin/python -m agent.src.agent
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

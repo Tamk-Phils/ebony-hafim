@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: deployment/docker/Dockerfile.backend
+    ports:
+      - "8000:8000"
+    environment:
+      - TEE_MODE=DEVELOPMENT_SOFTWARE_ONLY
+      - DATABASE_URL=sqlite:///./hafim.db
+      - SECRET_KEY=production_research_prototype_secret_key_change_me
+    volumes:
+      - ./data:/app/data
+      - ./sandbox:/app/sandbox
+
+  frontend:
+    build:
+      context: .
+      dockerfile: deployment/docker/Dockerfile.frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend

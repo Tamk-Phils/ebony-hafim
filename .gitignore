@@ -1,0 +1,29 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.sqlite3
+hafim.db
+/tmp/test_hafim.db
+.pytest_cache/
+
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+*.local
+
+# Environment & Secrets
+.env
+*.pem
+*.key
+*.eif
+
+# Test sandboxes
+sandbox/*
+!sandbox/.gitkeep
+!sandbox/system_auth.conf
+test_sandbox/*
+!test_sandbox/.gitkeep
+/tmp/hafim_*

@@ -1,0 +1,16 @@
+[Unit]
+Description=HA-FIM Backend API & Control Plane Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/hafim
+EnvironmentFile=/opt/hafim/.env
+ExecStart=/opt/hafim/venv/bin/uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

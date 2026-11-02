@@ -1,0 +1,1078 @@
+PROJECT: HARDWARE-ASSISTED FILE INTEGRITY MONITORING (HA-FIM)
+
+1. YOUR ROLE
+
+Act as a senior cybersecurity systems architect, systems programmer, cloud security engineer, full-stack developer, and software testing engineer.
+
+Your task is to design, implement, test, document, and prepare for deployment a functional Hardware-Assisted File Integrity Monitoring system called HA-FIM. Build the design to be clean simple and professional 
+
+The system is based on the research proposal:
+
+“Hardware-Assisted File Integrity Monitoring Using Trusted Execution Environments (TEEs) in Cloud Infrastructure.”
+
+This is a cybersecurity research prototype intended for academic research, experimental evaluation, and demonstration.
+
+Do not merely generate a frontend, a project proposal, mock dashboards, or static screenshots. Build an operational application with working backend services, file integrity monitoring, cryptographic hashing, baseline protection, event detection, alerting, testing, and a genuine Trusted Execution Environment integration path.
+
+Where hardware-backed functionality cannot be executed in the current environment, implement the software components that can run locally and clearly separate them from the real hardware-backed components.
+
+Never claim that a security feature is hardware-protected unless that protection has actually been implemented and verified.
+
+2. PRIMARY OBJECTIVE
+
+Build a system that detects unauthorized changes to files and directories while protecting its security-critical monitoring logic and trusted file baseline from attacks targeting the operating system or hypervisor.
+
+Traditional File Integrity Monitoring systems generally depend on the host operating system. An attacker who compromises the operating system may be able to modify files, alter the trusted baseline, disable the monitoring agent, or suppress alerts.
+
+HA-FIM must address this limitation by placing the security-critical comparison engine and protected baseline state inside a supported Trusted Execution Environment.
+
+The system must monitor designated files and directories for:
+
+	•	File creation.
+	•	File modification.
+	•	File deletion.
+	•	File permission changes.
+	•	Changes to relevant file metadata.
+	•	Changes to file contents.
+	•	Attempts to interfere with the host-side monitoring component.
+	•	Attempts to alter or suppress reported integrity violations.
+
+Use SHA-256 as the primary file-content hashing algorithm.
+
+3. TECHNICAL ACCURACY REQUIREMENTS
+
+Before implementing the TEE integration, investigate the actual hardware and software requirements of the target environment.
+
+Important distinctions:
+
+	•	Intel SGX provides application-level enclave isolation on supported platforms.
+	•	AMD SEV-family technologies protect virtual machines using hardware-assisted memory encryption and related isolation mechanisms.
+	•	ARM TrustZone separates execution into Normal and Secure worlds on supported ARM platforms.
+	•	AWS Nitro Enclaves provide isolated compute environments using the AWS Nitro architecture. They are not Intel SGX enclaves.
+	•	Azure Confidential Computing and Google Cloud Confidential VMs must be evaluated according to their actual supported confidential-computing technologies and instance configurations.
+
+Do not assume these technologies provide identical security guarantees.
+
+For the primary implementation, investigate AWS Nitro Enclaves as the target environment, consistent with the research proposal’s intended cloud deployment.
+
+Verify the current AWS Nitro Enclaves SDK, supported instance requirements, enclave communication mechanisms, attestation capabilities, and deployment prerequisites using official documentation.
+
+If Nitro Enclaves cannot be used within the available budget or account permissions, implement an alternative supported TEE adapter where feasible.
+
+Do not silently substitute ordinary Docker containers, software emulation, or a conventional virtual machine for a hardware-backed TEE.
+
+Any fallback must be explicitly identified as a development or simulation mode.
+
+4. REQUIRED TECHNOLOGY STACK
+
+Choose a maintainable stack suitable for a cybersecurity research prototype.
+
+Preferred technologies:
+
+Frontend
+
+	•	React.
+	•	TypeScript.
+	•	Vite.
+	•	Tailwind CSS.
+	•	A reusable component library where appropriate.
+	•	Recharts for statistical charts if needed.
+	•	Lucide icons.
+
+Backend API
+
+	•	Python.
+	•	FastAPI.
+	•	Pydantic for input validation.
+	•	SQLAlchemy or an equivalent maintainable database layer.
+	•	WebSockets or server-sent events for live dashboard updates.
+
+Host-side monitoring agent
+
+	•	Python for the initial host-side agent.
+	•	Linux filesystem event monitoring using an appropriate library or supported operating-system interfaces.
+	•	SHA-256 hashing using a trusted cryptographic implementation.
+	•	A narrow, validated communication interface to the protected comparison engine.
+
+TEE-resident security engine
+
+	•	Rust or C/C++, depending on compatibility with the chosen TEE SDK.
+	•	SHA-256 cryptographic verification.
+	•	Baseline management.
+	•	Integrity comparison.
+	•	Authenticated requests and responses.
+	•	Protected security-critical state.
+	•	Strict input validation.
+
+For AWS Nitro Enclaves, select the appropriate supported SDK and language bindings. Do not assume that an Intel SGX SDK is compatible with Nitro Enclaves.
+
+Database
+
+Use SQLite for the initial local research prototype.
+
+Structure the database layer so that PostgreSQL can be introduced for a multi-user deployment without redesigning the application.
+
+Deployment
+
+	•	Docker Compose for local development where appropriate.
+	•	Linux systemd for the monitoring agent if required.
+	•	AWS Nitro Enclaves deployment artifacts for the hardware-backed implementation.
+	•	Environment-based configuration.
+	•	Automated testing and reproducible setup instructions.
+
+Avoid unnecessary microservices and resource-heavy dependencies.
+
+5. SYSTEM ARCHITECTURE
+
+Implement the following logical components.
+
+Component A: Host Monitoring Agent
+
+The host monitoring agent is responsible for:
+
+	1.	Watching explicitly configured files and directories.
+	2.	Detecting filesystem events.
+	3.	Reading file content and relevant metadata.
+	4.	Sending the required data to the integrity verification service.
+	5.	Receiving authenticated comparison results.
+	6.	Forwarding event information to the backend reporting service.
+	7.	Reporting its own health status.
+	8.	Detecting interruptions in its monitoring operations where feasible.
+
+The host agent must be treated as potentially compromised.
+
+Do not place the authoritative trusted baseline exclusively in host-accessible storage.
+
+Do not assume that filesystem event notifications are complete or trustworthy.
+
+Implement periodic reconciliation scans to identify changes missed by filesystem notifications.
+
+Use stable file identifiers and metadata where appropriate to handle renames, hard links, and races between file access and modification.
+
+Clearly document the limitations of monitoring when the host kernel is compromised.
+
+Component B: TEE-Resident Comparison Engine
+
+Implement the security-critical integrity verification engine inside the selected TEE.
+
+The engine must:
+
+	1.	Accept validated file verification requests.
+	2.	Compute or verify SHA-256 hashes using trusted cryptographic code.
+	3.	Maintain protected baseline records.
+	4.	Compare observed file content against the expected baseline.
+	5.	Identify new, modified, deleted, or permission-changed files.
+	6.	Generate structured integrity results.
+	7.	Maintain relevant protected state.
+	8.	Reject malformed requests and invalid state transitions.
+	9.	Authenticate communication with authorized host-side components.
+	10.	Support baseline initialization, authorized baseline updates, and integrity verification.
+
+The authoritative baseline must not be trusted merely because the host agent supplies it.
+
+Design baseline initialization and updates so that only an authorized administrator can approve them.
+
+Use authenticated administrative operations, signed requests where appropriate, and replay protection.
+
+A baseline update must not silently approve a file modification that was never authorized.
+
+Where feasible, use a protected monotonic sequence number or equivalent anti-replay mechanism. Clearly document any limitations if durable anti-rollback protection is unavailable.
+
+Component C: Baseline Management
+
+Implement a secure baseline management service.
+
+For each monitored file, maintain relevant information such as:
+
+	•	File identifier or normalized path.
+	•	SHA-256 hash.
+	•	File size.
+	•	File permissions.
+	•	Relevant timestamps.
+	•	Baseline creation time.
+	•	Baseline version.
+	•	Authorized update history.
+	•	Verification status.
+
+Provide operations for:
+
+	•	Initializing a baseline.
+	•	Viewing baseline records.
+	•	Comparing observed state with the baseline.
+	•	Approving an authorized change.
+	•	Updating the baseline through an authenticated administrative workflow.
+	•	Exporting baseline information for authorized investigation.
+
+Never provide an unauthenticated endpoint that allows arbitrary users to replace the trusted baseline.
+
+If a baseline is lost or the TEE is restarted, the system must not silently trust a replacement supplied by the host.
+
+Implement a documented recovery and reinitialization process.
+
+Component D: Host-to-TEE Communication Interface
+
+Design a narrow communication interface between the host agent and the TEE.
+
+The interface must:
+
+	•	Validate message structure and length.
+	•	Authenticate requests where feasible.
+	•	Validate response authenticity.
+	•	Reject malformed messages.
+	•	Use request identifiers.
+	•	Prevent replay of security-sensitive operations.
+	•	Handle timeouts and communication failures.
+	•	Limit the information exposed outside the TEE.
+	•	Avoid unnecessary disclosure of sensitive file contents.
+
+For AWS Nitro Enclaves, use the supported communication mechanisms and SDKs rather than inventing an unsupported enclave interface.
+
+Investigate whether the selected architecture should transmit file contents, file hashes, or a combination of content and metadata.
+
+Explain the security consequences of the selected design.
+
+If file content is read outside the TEE before being submitted for verification, document that the compromised host may influence what the TEE receives.
+
+Do not claim that the TEE can independently observe the host filesystem unless the implementation actually provides such a capability.
+
+Component E: Alerting and Reporting Service
+
+Implement a functional alerting system.
+
+Every integrity violation must generate a structured event containing, where available:
+
+	•	Unique event identifier.
+	•	Event timestamp.
+	•	File path or identifier.
+	•	Event type.
+	•	Expected SHA-256 hash.
+	•	Observed SHA-256 hash.
+	•	Expected permissions.
+	•	Observed permissions.
+	•	Severity.
+	•	Verification result.
+	•	Monitoring agent status.
+	•	TEE verification status.
+	•	Relevant baseline version.
+	•	Correlation or request identifier.
+
+Do not expose sensitive file contents in the event log.
+
+Support alert categories including:
+
+	•	Unauthorized modification.
+	•	Unexpected file creation.
+	•	File deletion.
+	•	Permission change.
+	•	Baseline verification failure.
+	•	Monitoring agent interruption.
+	•	TEE communication failure.
+	•	Invalid or replayed request.
+	•	Unauthorized baseline update attempt.
+	•	Unavailable or unverifiable TEE attestation.
+
+Implement a persistent event log.
+
+Support real-time updates in the dashboard.
+
+Provide filtering by severity, event type, file, date, and verification status.
+
+Provide CSV export for authorized users.
+
+Do not automatically mark a security incident as resolved simply because the monitored file later returns to its original state.
+
+6. SECURITY AND TRUST MODEL
+
+Implement the system around an explicit threat model.
+
+Assume an attacker may:
+
+	•	Modify monitored files.
+	•	Delete monitored files.
+	•	Change file permissions.
+	•	Obtain root privileges on the host.
+	•	Modify the host monitoring agent.
+	•	Modify ordinary host-side baseline files.
+	•	Attempt to suppress alerts.
+	•	Attempt to replay previously valid requests.
+	•	Attempt to provide stale or manipulated filesystem observations.
+
+The primary security objective is to protect the comparison engine and its authoritative baseline from host kernel or hypervisor interference, to the extent supported by the selected TEE architecture.
+
+Document the limits of this protection.
+
+In particular:
+
+	•	A TEE cannot automatically prove that host-supplied file content is the current or genuine content of a filesystem object.
+	•	A compromised host may withhold events or deny service.
+	•	An attacker may exploit vulnerabilities in the TEE application itself.
+	•	Attestation depends on correctly validating the evidence and the expected measurements.
+	•	A compromised administrator account may authorize malicious baseline changes.
+	•	Hardware-backed isolation does not automatically eliminate side-channel risks.
+	•	A compromised host may interfere with alert delivery outside the TEE.
+	•	A hash comparison detects differences but does not establish whether a change was authorized.
+
+Where possible, protect alert authenticity using signed or authenticated event messages.
+
+Design the backend to distinguish between a cryptographically verified event and an event reported by an untrusted host component.
+
+7. WEB APPLICATION AND DASHBOARD
+
+Build a professional cybersecurity dashboard suitable for a university research demonstration.
+
+The interface must be responsive and usable on desktop and mobile screens.
+
+Use a modern, restrained security-operations visual style.
+
+Create the following pages.
+
+Page 1: Overview Dashboard
+
+Display:
+
+	•	Total monitored files.
+	•	Files currently matching their trusted baseline.
+	•	Files with integrity violations.
+	•	Critical and high-severity events.
+	•	Recent security events.
+	•	Monitoring agent health.
+	•	TEE connection status.
+	•	Last successful integrity scan.
+	•	Last baseline verification.
+	•	Current deployment mode.
+	•	Recent detection activity.
+
+Display genuine data retrieved from the backend.
+
+Do not use hardcoded statistics, simulated production data, or fake security events.
+
+When no monitored files exist, show a useful empty state with instructions for adding the first monitoring target.
+
+Page 2: Monitored Files
+
+Display a searchable table containing:
+
+	•	File path.
+	•	File type.
+	•	File size.
+	•	Expected hash.
+	•	Last observed hash.
+	•	Integrity status.
+	•	File permissions.
+	•	Last verification time.
+	•	Baseline version.
+
+Provide authorized actions to:
+
+	•	Add a monitoring target.
+	•	Remove a monitoring target.
+	•	Trigger a verification scan.
+	•	View file details.
+	•	Review change history.
+	•	Request an authorized baseline update.
+
+Validate every operation on the backend.
+
+Do not allow arbitrary filesystem access through a path input.
+
+Restrict monitoring targets to administrator-configured, explicitly approved directories.
+
+Page 3: Integrity Events
+
+Display a searchable and filterable list of integrity events.
+
+Provide severity badges, event details, timestamps, and investigation status.
+
+Allow an administrator to open an event and inspect:
+
+	•	Expected and observed file hashes.
+	•	Detected changes.
+	•	Relevant baseline version.
+	•	Source agent.
+	•	TEE verification outcome.
+	•	Related events.
+	•	Available response actions.
+
+Page 4: Baseline Management
+
+Display baseline status and authorized baseline operations.
+
+Include:
+
+	•	Baseline initialization.
+	•	Baseline version history.
+	•	Current trusted records.
+	•	Pending baseline changes.
+	•	Authorized approval workflow.
+	•	Baseline verification status.
+	•	Recovery and reinitialization status.
+
+Require appropriate authentication and authorization for sensitive operations.
+
+Page 5: TEE Status and Attestation
+
+Display:
+
+	•	Selected TEE platform.
+	•	Deployment mode.
+	•	Enclave or protected workload status.
+	•	Connection health.
+	•	Last successful attestation verification.
+	•	Enclave measurement where applicable.
+	•	Software and configuration versions.
+	•	Last successful verification request.
+	•	Communication errors.
+	•	Security limitations and warnings.
+
+Only display attestation as verified when genuine evidence has been checked against an explicit trust policy.
+
+If running in local development mode, show a visible warning that hardware-backed isolation is not active.
+
+Page 6: Testing and Evaluation
+
+Provide an interface for running safe, controlled integrity tests against dedicated test files.
+
+Tests must include:
+
+	•	Modify a test file.
+	•	Create a test file.
+	•	Delete a test file.
+	•	Change test-file permissions.
+	•	Restore a test file.
+	•	Verify an unchanged file.
+	•	Test unauthorized baseline update rejection.
+	•	Test malformed request rejection.
+	•	Test monitoring interruption detection.
+	•	Test alert delivery and persistence.
+
+Require explicit selection of a designated test directory.
+
+Never perform destructive tests against arbitrary user files.
+
+Display the test result, expected outcome, actual outcome, detection latency, and supporting event identifier.
+
+Page 7: Performance Evaluation
+
+Implement tools for collecting empirical performance measurements.
+
+Record:
+
+	•	Number of files checked.
+	•	File sizes.
+	•	Hash computation time.
+	•	End-to-end verification latency.
+	•	Detection latency.
+	•	CPU utilization.
+	•	Memory utilization.
+	•	Event processing throughput.
+	•	TEE communication overhead.
+	•	Failed verification requests.
+
+Support repeated runs and configurable test sizes.
+
+Store the actual measurements and allow authorized users to export them.
+
+Do not fabricate performance results.
+
+Page 8: Audit and Configuration
+
+Provide:
+
+	•	Administrator audit logs.
+	•	Monitoring configuration.
+	•	Authorized monitoring roots.
+	•	Scan intervals.
+	•	Alerting configuration.
+	•	TEE connection settings.
+	•	Application version.
+	•	System health.
+	•	Authentication and session settings.
+
+Never expose secret keys, credentials, or sensitive environment variables in the frontend.
+
+8. AUTHENTICATION AND AUTHORIZATION
+
+Implement secure administrative access.
+
+Include:
+
+	•	Administrator login.
+	•	Secure password hashing.
+	•	Session management.
+	•	Logout.
+	•	Protected API endpoints.
+	•	Authorization checks for sensitive operations.
+	•	Rate limiting on authentication endpoints.
+	•	Input validation.
+	•	CSRF protection if cookie-based authentication is used.
+	•	Security headers.
+	•	Audit logging for privileged operations.
+
+Use environment variables for secrets.
+
+Provide a safe first-run administrator setup procedure.
+
+Do not create a publicly known default administrator password.
+
+Do not expose baseline update operations, monitoring configuration, or destructive test endpoints to unauthenticated users.
+
+Document the distinction between dashboard authentication and authorization to perform sensitive operations inside the TEE.
+
+9. BACKEND API
+
+Create a versioned REST API.
+
+Suggested endpoints include:
+
+Authentication:
+
+	•	POST /api/v1/auth/setup
+	•	POST /api/v1/auth/login
+	•	POST /api/v1/auth/logout
+	•	GET /api/v1/auth/me
+
+Dashboard:
+
+	•	GET /api/v1/dashboard/summary
+	•	GET /api/v1/system/health
+
+Monitoring:
+
+	•	GET /api/v1/monitored-files
+	•	POST /api/v1/monitored-files
+	•	GET /api/v1/monitored-files/{id}
+	•	DELETE /api/v1/monitored-files/{id}
+	•	POST /api/v1/monitored-files/{id}/verify
+
+Baselines:
+
+	•	GET /api/v1/baselines
+	•	GET /api/v1/baselines/{id}
+	•	POST /api/v1/baselines/initialize
+	•	POST /api/v1/baselines/{id}/approve-update
+	•	GET /api/v1/baselines/{id}/history
+
+Integrity events:
+
+	•	GET /api/v1/events
+	•	GET /api/v1/events/{id}
+	•	PATCH /api/v1/events/{id}/status
+	•	GET /api/v1/events/export
+
+TEE:
+
+	•	GET /api/v1/tee/status
+	•	POST /api/v1/tee/verify-connection
+	•	GET /api/v1/tee/attestation
+
+Testing:
+
+	•	GET /api/v1/tests
+	•	POST /api/v1/tests/run
+	•	GET /api/v1/tests/{id}
+
+Evaluation:
+
+	•	POST /api/v1/evaluations/run
+	•	GET /api/v1/evaluations
+	•	GET /api/v1/evaluations/{id}
+	•	GET /api/v1/evaluations/export
+
+Audit:
+
+	•	GET /api/v1/audit-logs
+
+These endpoints are proposed examples, not permission to implement insecure operations.
+
+Adapt the endpoint structure where necessary to enforce proper authorization, asynchronous operations, and the selected TEE communication model.
+
+Generate OpenAPI documentation.
+
+10. DATABASE DESIGN
+
+Design appropriate database models for:
+
+	•	Administrators.
+	•	Sessions, if persisted.
+	•	Monitoring targets.
+	•	File baselines.
+	•	Baseline versions.
+	•	Integrity events.
+	•	Monitoring agent status.
+	•	TEE status.
+	•	Attestation verification records.
+	•	Test executions.
+	•	Performance evaluation runs.
+	•	Audit logs.
+	•	Approved baseline changes.
+
+Use appropriate indexes and constraints.
+
+Store timestamps consistently in UTC.
+
+Use database transactions for security-sensitive state changes.
+
+Do not store plaintext passwords.
+
+Do not treat the application database as the authoritative protected baseline if the database resides entirely outside the TEE.
+
+Keep the roles of the application database and the TEE-protected baseline clearly separated.
+
+11. FILESYSTEM MONITORING ENGINE
+
+Implement a real monitoring engine.
+
+For Linux, use an appropriate filesystem event mechanism such as inotify through a suitable library, with periodic reconciliation scans.
+
+Handle the limitations of event notification systems.
+
+Account for:
+
+	•	Nested directories.
+	•	Large files.
+	•	File renames.
+	•	Deleted files.
+	•	Permission changes.
+	•	Temporary files.
+	•	Symbolic links.
+	•	File access races.
+	•	Excluded directories.
+	•	Permission errors.
+	•	Monitoring service restarts.
+
+Do not follow symbolic links outside approved monitoring roots.
+
+Prevent directory traversal and unsafe path resolution.
+
+Avoid blocking the entire monitoring service while hashing large files.
+
+Use bounded queues and appropriate concurrency controls.
+
+Make scan intervals configurable.
+
+When an event cannot be verified, record the failure explicitly rather than treating the file as safe.
+
+12. TEE ADAPTER AND DEVELOPMENT MODE
+
+Create a well-defined interface between the application and the TEE implementation.
+
+For example, define operations conceptually equivalent to:
+
+	•	initialize_baseline
+	•	verify_file
+	•	verify_metadata
+	•	approve_baseline_update
+	•	get_baseline_status
+	•	get_platform_status
+	•	verify_attestation
+
+Provide separate implementations for:
+
+A. LOCAL DEVELOPMENT MODE
+
+This mode must run on an ordinary Linux development machine without requiring a TEE.
+
+It may use software-based integrity verification for development and interface testing.
+
+It must be clearly labeled as software-only.
+
+It must not claim resistance to kernel compromise.
+
+B. HARDWARE-BACKED TEE MODE
+
+This mode must communicate with a genuine supported TEE deployment.
+
+It must fail safely when the enclave is unavailable, the platform is unsupported, attestation fails, or the expected security policy is not satisfied.
+
+It must not silently fall back to software-only mode.
+
+C. OPTIONAL TEST MODE
+
+A test adapter may simulate expected success and failure responses for automated tests.
+
+This mode must be available only through explicit test configuration and must be visibly identified.
+
+Never represent test-mode responses as genuine hardware-backed results.
+
+13. IMPORTANT SECURITY DESIGN ISSUE: TRUSTED FILE CONTENT
+
+The system must explicitly address the difficulty of verifying files on a host that may be compromised.
+
+A TEE does not automatically have trusted access to the host filesystem.
+
+If the host reads a file and submits its content to the TEE, a compromised host may submit stale, substituted, or fabricated content.
+
+Implement the strongest practical design supported by the selected architecture.
+
+At minimum:
+
+	1.	Ensure that baseline records are protected from ordinary host modification.
+	2.	Authenticate requests and responses.
+	3.	Use request identifiers and replay protection.
+	4.	Record verification timestamps and source information.
+	5.	Detect unexpected baseline state changes.
+	6.	Report when trustworthy verification cannot be established.
+	7.	Explain the limitations of host-supplied content.
+	8.	Investigate available remote attestation and trusted measurement mechanisms.
+	9.	Avoid claiming complete protection against a malicious kernel unless the design actually establishes that property.
+
+Document the difference between:
+
+	•	Detecting ordinary filesystem changes.
+	•	Protecting baseline integrity.
+	•	Protecting the comparison engine.
+	•	Establishing the authenticity of file observations.
+	•	Ensuring that alerts reach an external recipient.
+
+These are distinct security properties.
+
+14. TESTING REQUIREMENTS
+
+Write automated tests for the backend, monitoring engine, baseline operations, event processing, and TEE communication interface.
+
+Include tests for:
+
+	•	SHA-256 correctness.
+	•	Baseline initialization.
+	•	Successful verification of unchanged files.
+	•	Detection of modified files.
+	•	Detection of new files.
+	•	Detection of deleted files.
+	•	Detection of permission changes.
+	•	Authorized baseline updates.
+	•	Rejection of unauthorized baseline updates.
+	•	Rejection of malformed requests.
+	•	Rejection of replayed security-sensitive requests.
+	•	Authentication and authorization.
+	•	Event persistence.
+	•	Monitoring recovery after interruption.
+	•	TEE communication failures.
+	•	Attestation validation failures.
+	•	Software-only mode labeling.
+	•	Prevention of silent fallback to software-only mode.
+
+For hardware-specific tests that cannot run locally, provide a separate test suite and explicit execution instructions.
+
+Do not report hardware integration tests as passed unless they have actually run against a supported TEE.
+
+15. EMPIRICAL EVALUATION
+
+Implement an experimental framework based on the research proposal.
+
+Compare HA-FIM against a conventional software-based FIM baseline.
+
+Use equivalent test files and scenarios wherever practical.
+
+Measure:
+
+	1.	Detection accuracy.
+	2.	Detection latency.
+	3.	End-to-end verification latency.
+	4.	CPU overhead.
+	5.	Memory utilization.
+	6.	Hash computation time.
+	7.	TEE communication overhead.
+	8.	Event processing throughput.
+	9.	False positives.
+	10.	False negatives under the defined test conditions.
+
+Use repeatable experimental procedures.
+
+Record the test environment, software versions, configuration, number of files, file sizes, number of runs, and relevant system specifications.
+
+Calculate appropriate summary statistics from the measurements actually collected.
+
+Clearly distinguish local software-mode results from hardware-backed TEE results.
+
+Do not assume that TEE deployment will necessarily improve performance.
+
+Do not fabricate measurements, detection rates, graphs, or security outcomes.
+
+Provide CSV export and reproducible instructions for rerunning experiments.
+
+16. USER EXPERIENCE
+
+Build an interface that is clear enough for a researcher or system administrator to operate without reading the source code.
+
+Provide:
+
+	•	Loading states.
+	•	Useful error messages.
+	•	Empty states.
+	•	Confirmation dialogs for sensitive actions.
+	•	Search and filtering.
+	•	Pagination where needed.
+	•	Accessible form controls.
+	•	Clear system health indicators.
+	•	Visible deployment-mode labels.
+	•	Clear warnings when hardware protection is unavailable.
+	•	Consistent status terminology.
+	•	Useful documentation links.
+
+Avoid excessive animations, unnecessary 3D graphics, and resource-heavy visual effects.
+
+Prioritize reliability and clarity over decorative design.
+
+17. PROJECT STRUCTURE
+
+Organize the project cleanly.
+
+A suggested structure is:
+
+hafim/
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── pages/
+│   │   ├── layouts/
+│   │   ├── services/
+│   │   ├── hooks/
+│   │   ├── types/
+│   │   └── main.tsx
+│   ├── package.json
+│   └── README.md
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   ├── core/
+│   │   ├── models/
+│   │   ├── schemas/
+│   │   ├── services/
+│   │   ├── database/
+│   │   └── main.py
+│   ├── tests/
+│   └── requirements.txt
+├── agent/
+│   ├── src/
+│   ├── tests/
+│   └── README.md
+├── tee/
+│   ├── interfaces/
+│   ├── adapters/
+│   ├── nitro-enclaves/
+│   └── README.md
+├── evaluation/
+│   ├── benchmarks/
+│   ├── scripts/
+│   └── README.md
+├── deployment/
+│   ├── docker/
+│   ├── aws/
+│   └── systemd/
+├── docs/
+│   ├── architecture.md
+│   ├── threat-model.md
+│   ├── security-model.md
+│   ├── api.md
+│   ├── testing.md
+│   ├── evaluation.md
+│   └── limitations.md
+├── .env.example
+├── .gitignore
+├── docker-compose.yml
+└── README.md
+
+You may modify this structure when necessary, but preserve clear separation between the frontend, backend, monitoring agent, TEE implementation, evaluation framework, and deployment files.
+
+Do not create empty placeholder files merely to make the project appear complete.
+
+18. DEVELOPMENT WORKFLOW
+
+Work in the following order.
+
+PHASE 1: ENVIRONMENT INSPECTION
+
+Inspect the existing workspace, available tools, programming languages, installed dependencies, operating system, and current project files.
+
+If an existing project is present, inspect it before modifying it.
+
+Do not overwrite unrelated files.
+
+Check whether the environment can support the selected TEE SDK.
+
+PHASE 2: ARCHITECTURE
+
+Create the architecture document, threat model, security assumptions, database schema, API plan, and implementation milestones.
+
+Identify which components can be implemented and tested locally and which require actual TEE hardware or cloud infrastructure.
+
+PHASE 3: BACKEND
+
+Implement the database, API, authentication, baseline management, event persistence, monitoring configuration, and health reporting.
+
+Write tests before treating security-sensitive functionality as complete.
+
+PHASE 4: MONITORING AGENT
+
+Implement filesystem monitoring, periodic reconciliation, SHA-256 calculation, safe path handling, and backend communication.
+
+Verify that the agent detects the expected file changes in a controlled test directory.
+
+PHASE 5: TEE INTEGRATION
+
+Implement the TEE adapter interface and software-only development adapter.
+
+Then implement the selected hardware-backed adapter using the supported SDK and documented communication mechanisms.
+
+Do not confuse interface completion with actual hardware-backed security.
+
+PHASE 6: FRONTEND
+
+Build the dashboard and its supporting pages using real backend APIs.
+
+Every displayed metric must originate from actual backend data or be explicitly identified as an unavailable measurement.
+
+PHASE 7: TESTING
+
+Run automated tests, correct failures, and verify the entire local workflow.
+
+Run hardware-specific tests separately where the required environment is available.
+
+PHASE 8: EVALUATION
+
+Implement reproducible experiments and compare software-only FIM with the hardware-backed implementation when available.
+
+Record actual results.
+
+PHASE 9: DEPLOYMENT
+
+Prepare local deployment instructions and the supported cloud deployment path.
+
+Verify configuration, startup procedures, health checks, and failure handling.
+
+PHASE 10: FINAL AUDIT
+
+Inspect the complete application for:
+
+	•	Broken routes.
+	•	Unimplemented controls.
+	•	Hardcoded production statistics.
+	•	Mock data accidentally exposed in production mode.
+	•	Insecure default credentials.
+	•	Missing authorization checks.
+	•	Unsafe filesystem access.
+	•	Exposed secrets.
+	•	Incorrect TEE security claims.
+	•	Silent software-mode fallback.
+	•	Missing documentation.
+	•	Failing tests.
+
+Fix the problems you can resolve and document anything that remains incomplete.
+
+19. RESOURCE AND COST CONSTRAINTS
+
+The development environment may have limited RAM and computing resources.
+
+Therefore:
+
+	•	Avoid unnecessary background services.
+	•	Do not run multiple large development servers without need.
+	•	Avoid heavyweight AI models.
+	•	Use SQLite for local development.
+	•	Keep the frontend and backend lightweight.
+	•	Use bounded concurrency for file hashing.
+	•	Provide scripts to start and stop services.
+	•	Do not require Kubernetes for the initial prototype.
+	•	Prefer free and academic resources where available.
+
+Investigate the actual cost of the selected cloud TEE environment before recommending deployment.
+
+Do not assume that a cloud education account includes Nitro Enclaves or that a general free tier covers every required resource.
+
+Provide a local development route that does not incur cloud charges.
+
+Never create paid cloud resources without explicit authorization.
+
+20. REQUIRED DELIVERABLES
+
+At the end, produce:
+
+	1.	A working frontend.
+	2.	A functioning backend API.
+	3.	A real Linux filesystem monitoring agent.
+	4.	A SHA-256 integrity verification implementation.
+	5.	A secure baseline management workflow.
+	6.	Persistent integrity event logging.
+	7.	A working development adapter.
+	8.	A documented hardware-backed TEE integration.
+	9.	Automated tests.
+	10.	A reproducible experimental evaluation framework.
+	11.	Local setup instructions.
+	12.	Cloud deployment instructions.
+	13.	A threat model.
+	14.	A security architecture document.
+	15.	A database schema.
+	16.	API documentation.
+	17.	A limitations document.
+	18.	A research demonstration guide.
+	19.	An environment configuration example.
+	20.	A final implementation and test report.
+
+The final report must state:
+
+	•	What has been implemented.
+	•	What has actually been tested.
+	•	Which tests passed or failed.
+	•	Whether the frontend and backend run successfully.
+	•	Whether filesystem monitoring works.
+	•	Whether integrity violations are detected.
+	•	Whether the TEE integration has been implemented.
+	•	Whether a genuine hardware-backed TEE was available and tested.
+	•	Whether attestation was genuinely verified.
+	•	Which limitations remain.
+	•	What is required for the next deployment stage.
+
+21. ACCEPTANCE CRITERIA
+
+The project is not complete merely because the frontend looks professional.
+
+The minimum locally demonstrable acceptance criteria are:
+
+	1.	An administrator can access the application securely.
+	2.	An administrator can configure an approved test directory.
+	3.	The monitoring agent can detect changes to designated test files.
+	4.	SHA-256 hashes are calculated correctly.
+	5.	Integrity events are persisted in the database.
+	6.	The dashboard displays actual monitoring and event information.
+	7.	Unauthorized baseline update attempts are rejected.
+	8.	A file modification produces an integrity violation.
+	9.	A new file produces the expected event.
+	10.	A deleted file produces the expected event.
+	11.	A permission change produces the expected event.
+	12.	The system can run a repeatable verification scan.
+	13.	Failed verification and communication errors are reported.
+	14.	Software-only mode is clearly labeled.
+	15.	The application never falsely reports that hardware-backed isolation is active.
+	16.	Automated tests cover the major security-sensitive operations.
+	17.	The project includes reproducible setup and testing instructions.
+
+Additional acceptance criteria for the hardware-backed implementation:
+
+	1.	The selected TEE deployment starts successfully on a supported environment.
+	2.	The application communicates with the genuine TEE through its supported interface.
+	3.	The trusted baseline and comparison logic operate within the intended protected boundary.
+	4.	Attestation evidence is verified against an explicit trust policy where applicable.
+	5.	The hardware-backed tests produce recorded results.
+	6.	The security report explains what the TEE does and does not protect.
+
+22. FINAL INSTRUCTION
+
+Begin by inspecting the current workspace and verifying the available development environment.
+
+Then create a short implementation plan and proceed directly to building the application.
+
+Do not stop after producing an architecture diagram, a UI mockup, a list of suggestions, or a set of empty project files.
+
+Implement the system in small, testable stages.
+
+Run the relevant tests after each stage and fix failures before proceeding.
+
+When a cloud resource, hardware feature, account permission, or external credential is unavailable, implement the remaining components and explain the exact prerequisite needed to complete that integration.
+
+Do not ask me to manually implement code that you can create yourself.
+
+Do not fabricate successful test results.
+
+Do not claim a genuine TEE deployment, remote attestation, or resistance to kernel compromise unless the corresponding functionality has been implemented and appropriately verified.
+
+The goal is a functional, documented, testable HA-FIM research prototype that can be demonstrated locally and subsequently deployed in a supported hardware-backed cloud environment.
