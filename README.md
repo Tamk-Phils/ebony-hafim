@@ -126,6 +126,17 @@ For deploying the genuine hardware-backed enclave on an EC2 instance (e.g. `c5.x
 
 ---
 
+## Vercel Deployment (Frontend Control Plane)
+
+The React frontend control plane is pre-configured for instant zero-config deployment to **Vercel**:
+
+1. Connect this repository to your Vercel account.
+2. Vercel automatically detects the root [`vercel.json`](vercel.json) and builds `frontend/dist`.
+3. Add the optional environment variable `VITE_API_BASE_URL` pointing to your deployed backend (e.g. `https://api.hafim.yourdomain.com`).
+4. Full details: [Vercel Deployment Guide](docs/vercel-deployment.md).
+
+---
+
 ## Documentation Index
 
 - [System Architecture](docs/architecture.md)
@@ -136,4 +147,5 @@ For deploying the genuine hardware-backed enclave on an EC2 instance (e.g. `c5.x
 - [Testing & Validation Guide](docs/testing.md)
 - [Empirical Evaluation Framework](docs/evaluation.md)
 - [Research Demonstration Walkthrough](docs/research-demo-guide.md)
+- [Vercel Deployment Guide](docs/vercel-deployment.md)
 - [Final Implementation Report](FINAL_REPORT.md)

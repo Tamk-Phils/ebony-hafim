@@ -54,8 +54,21 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     const interval = setInterval(fetchTeeStatus, 15000);
 
     // WebSocket listener for live events
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/events`;
+    const customApiUrl = import.meta.env.VITE_API_BASE_URL;
+    let wsUrl: string;
+    if (customApiUrl) {
+      try {
+        const parsed = new URL(customApiUrl, window.location.href);
+        const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+        wsUrl = `${wsProtocol}//${parsed.host}/ws/events`;
+      } catch {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        wsUrl = `${protocol}//${window.location.host}/ws/events`;
+      }
+    } else {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsUrl = `${protocol}//${window.location.host}/ws/events`;
+    }
     let ws: WebSocket;
 
     try {

@@ -1,0 +1,20 @@
+{
+  "name": "ebony-hafim",
+  "version": "1.0.0",
+  "description": "Hardware-Assisted File Integrity Monitoring (HA-FIM) using TEEs in Cloud Infrastructure",
+  "private": true,
+  "scripts": {
+    "build": "npm run build --prefix frontend",
+    "dev": "npm run dev --prefix frontend",
+    "lint": "npm run lint --prefix frontend"
+  },
+  "keywords": [
+    "tee",
+    "fim",
+    "security",
+    "aws-nitro-enclaves",
+    "file-integrity-monitoring"
+  ],
+  "author": "Tamk-Phils",
+  "license": "Apache-2.0"
+}
