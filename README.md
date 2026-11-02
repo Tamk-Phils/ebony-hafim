@@ -5,7 +5,7 @@
 [![Tests](https://img.shields.io/badge/Tests-100%25%20Passing-emerald.svg)](docs/testing.md)
 [![License](https://img.shields.io/badge/License-Academic%20Research-purple.svg)](README.md)
 
-**Hardware-Assisted File Integrity Monitoring (HA-FIM)** is a cybersecurity research prototype designed to detect unauthorized filesystem changes while isolating the security-critical comparison engine and authoritative baseline state inside a **Trusted Execution Environment (TEE)**.
+**HA-FIM (Hardware-Assisted File Integrity Monitoring)** is a security system designed to detect unauthorized changes to important files stored on a computer or cloud server. It works by calculating a unique SHA-256 hash for each file and storing a trusted original version for comparison. The system continuously monitors the files, and whenever someone modifies, deletes, or creates a file unexpectedly, it detects the change and sends an alert through a dashboard. Its main security feature is using a Trusted Execution Environment (TEE) to protect the sensitive part of the monitoring process from attackers who may have compromised the main computer system. The project will test whether this hardware-assisted protection makes file monitoring more secure than traditional methods while measuring its performance, accuracy, and resource usage.
 
 Based on the research proposal:
 > *“Hardware-Assisted File Integrity Monitoring Using Trusted Execution Environments (TEEs) in Cloud Infrastructure.”*

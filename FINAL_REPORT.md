@@ -9,9 +9,9 @@
 
 ## 1. Executive Summary
 
-This report documents the design, implementation, and empirical verification of **HA-FIM (Hardware-Assisted File Integrity Monitoring)**. Traditional FIM systems fail when an adversary compromises the host operating system, as an attacker with root privileges can easily overwrite baseline databases, manipulate comparison logic, or suppress alerts.
+**HA-FIM (Hardware-Assisted File Integrity Monitoring)** is a security system designed to detect unauthorized changes to important files stored on a computer or cloud server. It works by calculating a unique SHA-256 hash for each file and storing a trusted original version for comparison. The system continuously monitors the files, and whenever someone modifies, deletes, or creates a file unexpectedly, it detects the change and sends an alert through a dashboard. Its main security feature is using a Trusted Execution Environment (TEE) to protect the sensitive part of the monitoring process from attackers who may have compromised the main computer system. The project tests whether this hardware-assisted protection makes file monitoring more secure than traditional methods while measuring its performance, accuracy, and resource usage.
 
-HA-FIM overcomes this limitation by placing the security-critical comparison engine and authoritative baseline state inside an isolated **Trusted Execution Environment (TEE)**, targeting **AWS Nitro Enclaves** in cloud deployments.
+Traditional FIM systems fail when an adversary compromises the host operating system, as an attacker with root privileges can easily overwrite baseline databases, manipulate comparison logic, or suppress alerts. HA-FIM overcomes this limitation by placing the security-critical comparison engine and authoritative baseline state inside an isolated **Trusted Execution Environment (TEE)**, targeting **AWS Nitro Enclaves** in cloud deployments.
 
 ---
 
