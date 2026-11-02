@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import List
 from pydantic_settings import BaseSettings
@@ -13,7 +14,11 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 12  # 12 hours
     
     # Database
-    DATABASE_URL: str = "sqlite:///./hafim.db"
+    DATABASE_URL: str = (
+        "sqlite:////tmp/hafim.db"
+        if os.environ.get("VERCEL")
+        else "sqlite:///./hafim.db"
+    )
     
     # TEE Configuration
     # Modes: DEVELOPMENT_SOFTWARE_ONLY, NITRO_ENCLAVE_HARDWARE, TEST_MOCK_ONLY

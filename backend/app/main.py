@@ -46,7 +46,10 @@ async def lifespan(app: FastAPI):
             db.commit()
 
         # Seed initial sandbox root
-        sandbox_path = os.path.abspath("sandbox")
+        if os.environ.get("VERCEL"):
+            sandbox_path = "/tmp/sandbox"
+        else:
+            sandbox_path = os.path.abspath("sandbox")
         os.makedirs(sandbox_path, exist_ok=True)
         # Create a sample monitored file in sandbox
         sample_file = os.path.join(sandbox_path, "system_auth.conf")
