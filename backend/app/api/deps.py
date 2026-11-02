@@ -43,13 +43,17 @@ def get_admin_and_token(
     return admin, credentials.credentials
 
 def log_audit(db: Session, admin_username: str, action: str, resource: str, details: str = None, request: Request = None):
-    ip = request.client.host if request and request.client else "127.0.0.1"
-    audit = AuditLog(
-        admin_username=admin_username,
-        action=action,
-        resource=resource,
-        details=details,
-        ip_address=ip
-    )
-    db.add(audit)
-    db.commit()
+    try:
+        ip = request.client.host if request and request.client else "127.0.0.1"
+        audit = AuditLog(
+            admin_username=admin_username,
+            action=action,
+            resource=resource,
+            details=details,
+            ip_address=ip
+        )
+        db.add(audit)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"Warning: Failed to persist audit log: {e}")
