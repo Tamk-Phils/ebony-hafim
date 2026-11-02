@@ -1,5 +1,32 @@
 import os
+import sys
+import types
 from contextlib import asynccontextmanager
+
+CURRENT_FILE = os.path.abspath(__file__)
+APP_DIR = os.path.dirname(CURRENT_FILE)
+BACKEND_DIR = os.path.abspath(os.path.join(APP_DIR, ".."))
+REPO_ROOT = os.path.abspath(os.path.join(BACKEND_DIR, ".."))
+
+for path in [REPO_ROOT, BACKEND_DIR]:
+    if os.path.exists(path) and path not in sys.path:
+        sys.path.insert(0, path)
+
+for sub in ["agent", "tee"]:
+    sub_path = os.path.join(BACKEND_DIR, sub)
+    if os.path.exists(sub_path) and sub_path not in sys.path:
+        sys.path.insert(0, sub_path)
+
+if "backend" not in sys.modules:
+    try:
+        import app
+        backend_pkg = types.ModuleType("backend")
+        backend_pkg.app = app
+        sys.modules["backend"] = backend_pkg
+        sys.modules["backend.app"] = app
+    except Exception:
+        pass
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session

@@ -1,0 +1,12 @@
+# Dockerfile for AWS Nitro Enclaves HA-FIM Security Engine
+FROM amazonlinux:2023
+
+# Minimal runtime requirements
+RUN dnf install -y python3 python3-pip && dnf clean all
+
+WORKDIR /app
+COPY enclave_server.py /app/enclave_server.py
+RUN chmod +x /app/enclave_server.py
+
+# Nitro Enclave application entrypoint
+CMD ["/usr/bin/python3", "/app/enclave_server.py", "5000"]
