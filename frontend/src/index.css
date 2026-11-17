@@ -5,8 +5,10 @@
 @layer base {
   body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background-color: #070b14;
+    background-color: #090d16;
     color: #e2e8f0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   
   code, pre {
@@ -14,26 +16,31 @@
   }
 }
 
-/* Custom subtle scrollbar */
+/* Crisp professional scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0b1325;
+  background: #0f172a;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e335f;
+  background: #334155;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #06b6d4;
+  background: #475569;
 }
 
-.glow-cyan {
-  box-shadow: 0 0 20px -5px rgba(6, 182, 212, 0.25);
+/* Professional card outline styling */
+.enterprise-card {
+  background-color: #0f172a;
+  border: 1px solid #1e293b;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.2), 0 1px 2px -1px rgba(0, 0, 0, 0.2);
 }
 
-.glow-danger {
-  box-shadow: 0 0 20px -5px rgba(239, 68, 68, 0.3);
+.enterprise-card-elevated {
+  background-color: #151e32;
+  border: 1px solid #283548;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
 }

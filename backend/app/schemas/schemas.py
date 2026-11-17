@@ -40,6 +40,7 @@ class DashboardSummaryResponse(BaseModel):
     last_baseline_version: int
     recent_events: List[Dict[str, Any]]
     detection_activity_chart: List[Dict[str, Any]]
+    host_telemetry: Optional[Dict[str, Any]] = None
 
 # --- Monitored Files & Targets ---
 class AddTargetRequest(BaseModel):

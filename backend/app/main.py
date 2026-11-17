@@ -1,6 +1,9 @@
 import os
 import sys
 import types
+import socket
+import logging
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 
 CURRENT_FILE = os.path.abspath(__file__)
@@ -48,7 +51,10 @@ from backend.app.api.v1 import (
 )
 from backend.app.services.websocket_manager import ws_manager
 from backend.app.services.tee_service import tee_service
+from backend.app.services.fim_service import fim_service
 from agent.src.agent import HostMonitoringAgent
+
+logger = logging.getLogger("hafim.backend")
 
 # Global monitoring agent instance
 host_agent: HostMonitoringAgent = None
@@ -95,17 +101,22 @@ async def lifespan(app: FastAPI):
             db.add(target)
             db.commit()
 
-        # Seed Agent Status
+        # Seed Agent Status with dynamic host platform telemetry
+        telemetry = HostMonitoringAgent.get_system_telemetry()
         agent_rec = db.query(AgentStatusRecord).first()
         if not agent_rec:
             agent_rec = AgentStatusRecord(
                 agent_id="host-agent-01",
-                hostname="kali-linux-workstation",
+                hostname=telemetry["hostname"],
                 status="ACTIVE",
                 monitored_paths_count=1,
                 events_generated_count=0
             )
             db.add(agent_rec)
+            db.commit()
+        else:
+            agent_rec.hostname = telemetry["hostname"]
+            agent_rec.status = "ACTIVE"
             db.commit()
 
         # Sync TEE DB status
@@ -113,12 +124,61 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
 
-    # 3. Start Host Monitoring Agent in background
+    # 3. Define agent verification & telemetry callbacks
+    def agent_verifier(file_path: str, observed_hash: Optional[str], size_bytes: int, permissions: str, sequence_no: int):
+        db_session = SessionLocal()
+        try:
+            return fim_service.verify_file_against_tee(
+                db=db_session,
+                file_path=file_path,
+                observed_hash=observed_hash,
+                size_bytes=size_bytes,
+                permissions=permissions
+            )
+        except Exception as err:
+            logger.error(f"Agent verification error for {file_path}: {err}")
+            return None
+        finally:
+            db_session.close()
+
+    def agent_heartbeat(agent_id: str, paths_count: int, files_count: int):
+        db_session = SessionLocal()
+        try:
+            rec = db_session.query(AgentStatusRecord).filter(AgentStatusRecord.agent_id == agent_id).first()
+            if rec:
+                rec.last_heartbeat = datetime.now(timezone.utc)
+                rec.monitored_paths_count = paths_count
+                rec.hostname = socket.gethostname()
+                rec.status = "ACTIVE"
+                db_session.commit()
+        except Exception:
+            pass
+        finally:
+            db_session.close()
+
+    def agent_event_cb(result, meta):
+        if not result:
+            return
+        db_session = SessionLocal()
+        try:
+            rec = db_session.query(AgentStatusRecord).first()
+            if rec and getattr(result, "verdict", None) not in ("MATCH", "CLEAN"):
+                rec.events_generated_count += 1
+                db_session.commit()
+        except Exception:
+            pass
+        finally:
+            db_session.close()
+
+    # 4. Start Host Monitoring Agent in background
     global host_agent
     host_agent = HostMonitoringAgent(
         agent_id="host-agent-01",
         approved_roots=settings.APPROVED_ROOTS,
-        reconciliation_interval=settings.RECONCILIATION_INTERVAL_SECONDS
+        reconciliation_interval=settings.RECONCILIATION_INTERVAL_SECONDS,
+        tee_verifier=agent_verifier,
+        event_callback=agent_event_cb,
+        heartbeat_callback=agent_heartbeat
     )
     # Add active targets to agent
     db = SessionLocal()

@@ -1,0 +1,31 @@
+# escape=`
+# ==============================================================================
+# HA-FIM: Windows Server Core Container Specification
+# ==============================================================================
+FROM mcr.microsoft.com/windows/servercore:ltsc2022
+
+SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+
+# Install Python 3.11 via Chocolatey or direct MSI
+RUN Set-ExecutionPolicy Bypass -Scope Process -Force; `
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; `
+    iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')); `
+    choco install python311 -y --no-progress; `
+    refreshenv
+
+WORKDIR C:\app
+
+COPY backend\requirements.txt requirements.txt
+RUN python -m pip install --no-cache-dir --upgrade pip setuptools; `
+    python -m pip install --no-cache-dir -r requirements.txt
+
+COPY backend C:\app\backend
+COPY agent C:\app\agent
+COPY tee C:\app\tee
+COPY docs C:\app\docs
+
+ENV PYTHONPATH=C:\app
+
+EXPOSE 8000
+
+CMD ["python", "-m", "uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -33,6 +33,22 @@ export interface DashboardSummary {
     type: string;
     count: number;
   }>;
+  host_telemetry?: {
+    hostname: string;
+    os_name: string;
+    os_release: string;
+    os_platform: string;
+    architecture: string;
+    python_version: string;
+    is_windows: boolean;
+    is_linux: boolean;
+    monitoring_backend: string;
+    agent_id?: string;
+    status?: string;
+    last_heartbeat?: string;
+    monitored_paths_count?: number;
+    events_generated_count?: number;
+  };
 }
 
 export interface MonitoredFile {

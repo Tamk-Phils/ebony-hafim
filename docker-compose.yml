@@ -1,5 +1,10 @@
 version: '3.8'
 
+# ==============================================================================
+# HA-FIM: Hardware-Assisted File Integrity Monitoring
+# Cross-Platform Cloud & Container Orchestration (Linux & Windows)
+# ==============================================================================
+
 services:
   backend:
     build:
@@ -8,12 +13,15 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - TEE_MODE=DEVELOPMENT_SOFTWARE_ONLY
-      - DATABASE_URL=sqlite:///./hafim.db
-      - SECRET_KEY=production_research_prototype_secret_key_change_me
+      - TEE_MODE=${TEE_MODE:-DEVELOPMENT_SOFTWARE_ONLY}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./hafim.db}
+      - SECRET_KEY=${SECRET_KEY:-hafim_production_research_key_change_in_production}
+      - RECONCILIATION_INTERVAL_SECONDS=15
+      - AGENT_HEARTBEAT_TIMEOUT_SECONDS=30
     volumes:
-      - ./data:/app/data
       - ./sandbox:/app/sandbox
+      - ./test_sandbox:/app/test_sandbox
+    restart: unless-stopped
 
   frontend:
     build:
@@ -23,3 +31,19 @@ services:
       - "80:80"
     depends_on:
       - backend
+    restart: unless-stopped
+
+  # Optional production database service (Uncomment if not using external cloud DB like Neon / RDS)
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: ${POSTGRES_USER:-hafim}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-securepass2026}
+  #     POSTGRES_DB: ${POSTGRES_DB:-hafim_db}
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+
+# volumes:
+#   pgdata:

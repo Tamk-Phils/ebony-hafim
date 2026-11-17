@@ -95,7 +95,7 @@ export const TEEAttestationPage: React.FC = () => {
               SOFTWARE DEVELOPMENT EMULATION ACTIVE (NO HARDWARE ENCLAVE)
             </div>
             <p className="leading-relaxed">
-              The system is currently running on standard Linux userspace memory without an active hardware-backed TEE (such as AWS Nitro Enclaves).
+              The system is currently running in host userspace memory (Linux / Windows) without an active hardware-backed TEE (such as AWS Nitro Enclaves).
               While cryptographic hashing, HMAC token signing, and anti-replay counters are operational,
               <strong> this environment does NOT provide memory encryption or isolation against a compromised host kernel.</strong>
             </p>

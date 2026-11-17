@@ -12,7 +12,8 @@ from backend.app.services.tee_service import tee_service
 
 class TestRunnerService:
     def __init__(self, sandbox_dir: str = None):
-        self.sandbox_dir = sandbox_dir or str(Path.home() / "Desktop/apps/ebony/test_sandbox")
+        base = Path(__file__).resolve().parents[3]
+        self.sandbox_dir = sandbox_dir or str((base / "test_sandbox").resolve())
 
     def _ensure_sandbox(self):
         os.makedirs(self.sandbox_dir, exist_ok=True)
@@ -50,6 +51,7 @@ class TestRunnerService:
                     error_message=res.get("error")
                 )
             except Exception as e:
+                db.rollback()
                 latency_ms = (time.perf_counter() - start_t) * 1000
                 execution = TestExecution(
                     test_name=name,

@@ -133,16 +133,28 @@ class FIMService:
         # Deactivate older baselines
         db.query(Baseline).update({Baseline.is_active: False})
 
-        # Persist new baseline record in database
-        new_baseline = Baseline(
-            version=init_res.version,
-            created_by=admin_username,
-            is_active=True,
-            notes=notes or f"Baseline initialized by {admin_username}",
-            total_files=len(entries_to_init),
-            enclave_signature=init_res.signature
-        )
-        db.add(new_baseline)
+        # Persist or update baseline record in database
+        existing_baseline = db.query(Baseline).filter(Baseline.version == init_res.version).first()
+        if existing_baseline:
+            new_baseline = existing_baseline
+            new_baseline.is_active = True
+            new_baseline.created_by = admin_username
+            new_baseline.notes = notes or f"Baseline initialized by {admin_username}"
+            new_baseline.total_files = len(entries_to_init)
+            new_baseline.enclave_signature = init_res.signature
+            # Remove any existing baseline entries for this version
+            db.query(BaselineEntry).filter(BaselineEntry.baseline_id == new_baseline.id).delete()
+        else:
+            new_baseline = Baseline(
+                version=init_res.version,
+                created_by=admin_username,
+                is_active=True,
+                notes=notes or f"Baseline initialized by {admin_username}",
+                total_files=len(entries_to_init),
+                enclave_signature=init_res.signature
+            )
+            db.add(new_baseline)
+        db.flush()
         db.flush()
 
         for (target_id, fpath, h, size, perms, ftype) in file_meta_list:

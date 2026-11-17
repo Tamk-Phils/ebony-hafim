@@ -3,6 +3,14 @@ from pathlib import Path
 from typing import List
 from pydantic_settings import BaseSettings
 
+import os
+import tempfile
+from pathlib import Path
+from typing import List
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BASE_DIR = Path(__file__).resolve().parents[3]
+
 class Settings(BaseSettings):
     PROJECT_NAME: str = "HA-FIM (Hardware-Assisted File Integrity Monitoring)"
     VERSION: str = "1.0.0"
@@ -31,10 +39,10 @@ class Settings(BaseSettings):
     
     # Approved Monitoring Roots (Administrator approved sandbox/root directories)
     APPROVED_ROOTS: List[str] = [
-        str(Path.home() / "Desktop/apps/ebony/sandbox"),
-        str(Path.home() / "Desktop/apps/ebony/test_sandbox"),
-        "/tmp/hafim_sandbox",
-        "/tmp/hafim_eval"
+        str((BASE_DIR / "sandbox").resolve()),
+        str((BASE_DIR / "test_sandbox").resolve()),
+        str((Path(tempfile.gettempdir()) / "hafim_sandbox").resolve()),
+        str((Path(tempfile.gettempdir()) / "hafim_eval").resolve()),
     ]
     
     # Monitoring Engine Configuration
@@ -42,8 +50,9 @@ class Settings(BaseSettings):
     AGENT_HEARTBEAT_TIMEOUT_SECONDS: int = 30
     MAX_FILE_SIZE_BYTES: int = 100 * 1024 * 1024  # 100 MB max for direct hashing
     
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore"
+    )
 
 settings = Settings()

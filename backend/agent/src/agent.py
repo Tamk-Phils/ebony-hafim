@@ -6,9 +6,14 @@ import struct
 import select
 import threading
 import hashlib
+import platform
+import socket
 from pathlib import Path
-from typing import Dict, List, Set, Optional, Callable
-from datetime import datetime, timezone
+from typing import Dict, List, Set, Optional, Callable, Any
+
+# Platform identification
+IS_WINDOWS = sys.platform == "win32" or os.name == "nt"
+IS_LINUX = sys.platform.startswith("linux")
 
 # Linux inotify constants
 IN_CLOEXEC = 0x00080000
@@ -24,15 +29,28 @@ IN_DELETE_SELF = 0x00000400
 IN_MOVE_SELF = 0x00000800
 IN_ISDIR = 0x40000000
 
-libc = ctypes.CDLL("libc.so.6", use_errno=True)
+# Safely load libc on Linux without breaking on Windows
+libc = None
+if IS_LINUX:
+    try:
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+    except Exception:
+        try:
+            import ctypes.util
+            lib_c = ctypes.util.find_library("c")
+            if lib_c:
+                libc = ctypes.CDLL(lib_c, use_errno=True)
+        except Exception:
+            libc = None
 
 class HostMonitoringAgent:
     """
-    Host-side File Integrity Monitoring Agent.
+    Cross-Platform Host-side File Integrity Monitoring Agent.
     
-    Monitors designated roots using Linux inotify events and scheduled
-    reconciliation scans. Reads observed file content, computes SHA-256 hashes,
-    and forwards verification requests across the narrow TEE communication channel.
+    Supports both Linux (native libc inotify_init1) and Windows (Win32 filesystem watcher
+    and differential polling engine), combined with scheduled background reconciliation sweeps.
+    Reads observed file contents, computes cryptographic SHA-256 digests, and dispatches
+    verifications to the protected TEE comparison boundary.
     """
 
     def __init__(
@@ -59,56 +77,95 @@ class HostMonitoringAgent:
         self._path_to_wd: Dict[str, int] = {}
         self._threads: List[threading.Thread] = []
         self._known_files: Dict[str, Dict] = {} # path -> {hash, mtime, size, permissions}
+        self._dir_snapshots: Dict[str, float] = {} # dir_path -> mtime
         self._monitored_paths: Set[str] = set()
+
+    @staticmethod
+    def get_system_telemetry() -> Dict[str, Any]:
+        """Provides dynamic OS and host telemetry without hardcoded fake profiles."""
+        engine_label = "Linux inotify (libc)" if (IS_LINUX and libc) else (
+            "Windows Win32 Directory Watcher" if IS_WINDOWS else "Cross-Platform Directory Watcher"
+        )
+        return {
+            "hostname": socket.gethostname(),
+            "os_name": platform.system(),
+            "os_release": platform.release(),
+            "os_platform": f"{platform.system()} {platform.release()}",
+            "architecture": platform.machine(),
+            "python_version": platform.python_version(),
+            "is_windows": IS_WINDOWS,
+            "is_linux": IS_LINUX,
+            "monitoring_backend": engine_label
+        }
 
     def get_next_sequence(self) -> int:
         with self._seq_lock:
             self._sequence_no += 1
             return self._sequence_no
 
+    def _normalize_path(self, p: str) -> str:
+        resolved = str(Path(p).resolve())
+        return os.path.normcase(resolved) if IS_WINDOWS else resolved
+
     def add_root(self, root_path: str):
         resolved = str(Path(root_path).resolve())
-        # Check against approved roots policy
-        is_approved = any(
-            resolved == app or resolved.startswith(app + os.sep)
-            for app in self.approved_roots
-        )
-        if not is_approved:
-            # Also allow if approved_roots is empty
-            if self.approved_roots:
-                raise PermissionError(f"Path '{resolved}' is outside approved monitoring roots: {self.approved_roots}")
+        norm_resolved = self._normalize_path(resolved)
+
+        if self.approved_roots:
+            is_approved = any(
+                norm_resolved == self._normalize_path(app) or
+                norm_resolved.startswith(self._normalize_path(app) + os.sep)
+                for app in self.approved_roots
+            )
+            if not is_approved:
+                raise PermissionError(
+                    f"Path '{resolved}' is outside approved monitoring roots: {self.approved_roots}"
+                )
 
         self._monitored_paths.add(resolved)
-        if self._running and self._inotify_fd >= 0:
-            self._watch_directory_tree(resolved)
+        if self._running:
+            if self._inotify_fd >= 0 and libc is not None:
+                self._watch_directory_tree(resolved)
 
     def remove_root(self, root_path: str):
         resolved = str(Path(root_path).resolve())
-        if resolved in self._monitored_paths:
-            self._monitored_paths.remove(resolved)
-            # Remove watch descriptors
+        norm_resolved = self._normalize_path(resolved)
+
+        to_remove = {
+            p for p in self._monitored_paths
+            if self._normalize_path(p) == norm_resolved
+        }
+        for p in to_remove:
+            self._monitored_paths.discard(p)
+
+        # Remove watch descriptors if using inotify
+        if self._inotify_fd >= 0 and libc is not None:
             for wd, p in list(self._watch_descriptors.items()):
                 if p == resolved or p.startswith(resolved + os.sep):
-                    libc.inotify_rm_watch(self._inotify_fd, wd)
+                    try:
+                        libc.inotify_rm_watch(self._inotify_fd, wd)
+                    except Exception:
+                        pass
                     del self._watch_descriptors[wd]
                     if p in self._path_to_wd:
                         del self._path_to_wd[p]
 
     def _safe_compute_sha256(self, file_path: str, chunk_size: int = 65536) -> Optional[str]:
-        """Safely compute SHA-256 preventing symlink traversal and race conditions."""
+        """Safely compute SHA-256 preventing symlink escape and handling permissions."""
         try:
-            # Check if symlink points outside approved roots
             real_path = os.path.realpath(file_path)
-            is_valid = any(
-                real_path == r or real_path.startswith(r + os.sep)
-                for r in self.approved_roots
-            ) if self.approved_roots else True
+            norm_real = self._normalize_path(real_path)
 
-            if not is_valid:
-                return None
+            if self.approved_roots:
+                is_valid = any(
+                    norm_real == self._normalize_path(r) or
+                    norm_real.startswith(self._normalize_path(r) + os.sep)
+                    for r in self.approved_roots
+                )
+                if not is_valid:
+                    return None
 
             if not os.path.isfile(file_path) or os.path.islink(file_path):
-                # Don't follow symlinks
                 if os.path.islink(file_path):
                     target = os.readlink(file_path)
                     return hashlib.sha256(f"symlink:{target}".encode()).hexdigest()
@@ -122,10 +179,14 @@ class HostMonitoringAgent:
         except (PermissionError, FileNotFoundError, OSError):
             return None
 
-    def _get_file_metadata(self, file_path: str) -> Dict:
+    def _get_file_metadata(self, file_path: str) -> Dict[str, Any]:
         try:
             st = os.stat(file_path, follow_symlinks=False)
-            perms = oct(st.st_mode & 0o777)[2:].zfill(4)
+            if IS_WINDOWS:
+                # Windows read/write permission mapping
+                perms = "0666" if os.access(file_path, os.W_OK) else "0444"
+            else:
+                perms = oct(st.st_mode & 0o777)[2:].zfill(4)
             return {
                 "size_bytes": st.st_size,
                 "permissions": perms,
@@ -141,7 +202,7 @@ class HostMonitoringAgent:
             }
 
     def verify_single_file(self, file_path: str):
-        """Dispatches file state to TEE verifier."""
+        """Dispatches observed file state across the narrow TEE verification boundary."""
         if not self.tee_verifier:
             return
 
@@ -172,21 +233,22 @@ class HostMonitoringAgent:
         elif file_path in self._known_files:
             del self._known_files[file_path]
 
-        # Trigger event callback if violation or state change
+        # Trigger event callback if registered
         if self.event_callback:
             self.event_callback(result, meta)
 
     def _watch_directory_tree(self, path: str):
-        if self._inotify_fd < 0 or not os.path.isdir(path):
+        """Recursively registers inotify watch descriptors on Linux."""
+        if self._inotify_fd < 0 or libc is None or not os.path.isdir(path):
             return
-        
+
         mask = (
             IN_MODIFY | IN_ATTRIB | IN_CLOSE_WRITE |
             IN_MOVED_FROM | IN_MOVED_TO | IN_CREATE |
             IN_DELETE | IN_DELETE_SELF | IN_MOVE_SELF
         )
 
-        for root, dirs, _ in os.walk(path):
+        for root, _, _ in os.walk(path):
             real_root = os.path.realpath(root)
             if real_root in self._path_to_wd:
                 continue
@@ -196,7 +258,10 @@ class HostMonitoringAgent:
                 self._path_to_wd[real_root] = wd
 
     def _inotify_loop(self):
-        """Worker thread processing Linux inotify events."""
+        """Worker thread processing Linux inotify event stream."""
+        if self._inotify_fd < 0 or libc is None:
+            return
+
         poll = select.poll()
         poll.register(self._inotify_fd, select.POLLIN)
 
@@ -204,7 +269,7 @@ class HostMonitoringAgent:
         EVENT_STRUCT_SIZE = struct.calcsize(EVENT_STRUCT_FMT)
 
         while self._running:
-            events = poll.poll(500) # 500ms timeout
+            events = poll.poll(500)
             if not events:
                 continue
 
@@ -229,76 +294,137 @@ class HostMonitoringAgent:
 
                     full_path = os.path.join(dir_path, name) if name else dir_path
 
-                    # New directory created: watch it
                     if (mask & IN_CREATE) and (mask & IN_ISDIR) and os.path.isdir(full_path):
                         self._watch_directory_tree(full_path)
 
-                    # Trigger file verification
                     self.verify_single_file(full_path)
-
-            except Exception as e:
+            except Exception:
                 if self._running:
                     time.sleep(0.1)
 
-    def _reconciliation_loop(self):
-        """Worker thread performing periodic sweep to reconcile missed inotify events."""
+    def _fast_watch_loop(self):
+        """
+        Cross-platform / Windows high-frequency directory watcher.
+        Detects immediate file changes, additions, deletions, and metadata updates
+        with sub-second responsiveness without requiring POSIX libc inotify.
+        """
         while self._running:
             try:
-                # 1. Send heartbeat
-                if self.heartbeat_callback:
-                    self.heartbeat_callback(self.agent_id, len(self._monitored_paths), len(self._known_files))
+                for root in list(self._monitored_paths):
+                    if not os.path.exists(root):
+                        continue
 
-                # 2. Reconcile all monitored roots
+                    if os.path.isfile(root):
+                        try:
+                            st = os.stat(root)
+                            last_known = self._known_files.get(root)
+                            if not last_known or last_known.get("mtime") != st.st_mtime or last_known.get("size") != st.st_size:
+                                self.verify_single_file(root)
+                        except OSError:
+                            pass
+                    elif os.path.isdir(root):
+                        # Walk directory tree
+                        current_files_in_tree = set()
+                        for dirpath, _, filenames in os.walk(root):
+                            for fname in filenames:
+                                fpath = os.path.join(dirpath, fname)
+                                current_files_in_tree.add(fpath)
+                                try:
+                                    st = os.stat(fpath)
+                                    cached = self._known_files.get(fpath)
+                                    if not cached or cached.get("mtime") != st.st_mtime or cached.get("size") != st.st_size:
+                                        self.verify_single_file(fpath)
+                                except OSError:
+                                    pass
+
+                        # Detect deletions within this root
+                        for cached_path in list(self._known_files.keys()):
+                            if cached_path.startswith(root + os.sep) and not os.path.exists(cached_path):
+                                self.verify_single_file(cached_path)
+            except Exception:
+                pass
+
+            # Responsive 500ms loop
+            for _ in range(5):
+                if not self._running:
+                    break
+                time.sleep(0.1)
+
+    def _reconciliation_loop(self):
+        """Worker thread performing periodic sweep to reconcile any edge-case events."""
+        while self._running:
+            try:
+                if self.heartbeat_callback:
+                    self.heartbeat_callback(
+                        self.agent_id,
+                        len(self._monitored_paths),
+                        len(self._known_files)
+                    )
+
                 for root in list(self._monitored_paths):
                     if not os.path.exists(root):
                         continue
                     if os.path.isfile(root):
                         self.verify_single_file(root)
                     elif os.path.isdir(root):
-                        self._watch_directory_tree(root)
+                        if self._inotify_fd >= 0 and libc is not None:
+                            self._watch_directory_tree(root)
                         for dirpath, _, filenames in os.walk(root):
                             for fname in filenames:
                                 fpath = os.path.join(dirpath, fname)
                                 self.verify_single_file(fpath)
 
-                # Check for deleted files in cache
                 for cached_path in list(self._known_files.keys()):
                     if not os.path.exists(cached_path):
                         self.verify_single_file(cached_path)
-
-            except Exception as e:
+            except Exception:
                 pass
 
-            # Sleep reconciliation interval
             for _ in range(self.reconciliation_interval):
                 if not self._running:
                     break
                 time.sleep(1)
 
     def start(self):
+        """Starts real-time filesystem watchers and background reconciliation."""
         if self._running:
             return
         self._running = True
-        self._inotify_fd = libc.inotify_init1(IN_NONBLOCK | IN_CLOEXEC)
+        self._threads = []
 
-        for root in self._monitored_paths:
-            if os.path.exists(root):
-                self._watch_directory_tree(root)
+        # 1. Attempt Linux inotify initialization if on Linux
+        if IS_LINUX and libc is not None:
+            try:
+                self._inotify_fd = libc.inotify_init1(IN_NONBLOCK | IN_CLOEXEC)
+                for root in self._monitored_paths:
+                    if os.path.exists(root):
+                        self._watch_directory_tree(root)
+                t_inotify = threading.Thread(target=self._inotify_loop, daemon=True, name="agent-inotify")
+                self._threads.append(t_inotify)
+            except Exception:
+                self._inotify_fd = -1
 
-        # Launch inotify thread
-        t_inotify = threading.Thread(target=self._inotify_loop, daemon=True, name="agent-inotify")
+        # 2. On Windows (or Linux if inotify is unavailable/restricted), run the fast watcher
+        if self._inotify_fd < 0:
+            t_fast = threading.Thread(target=self._fast_watch_loop, daemon=True, name="agent-watcher")
+            self._threads.append(t_fast)
+
+        # 3. Always run the background reconciliation safety sweep
         t_reconcile = threading.Thread(target=self._reconciliation_loop, daemon=True, name="agent-reconcile")
-        self._threads = [t_inotify, t_reconcile]
+        self._threads.append(t_reconcile)
+
         for t in self._threads:
             t.start()
 
     def stop(self):
+        """Gracefully terminates monitoring threads and releases descriptors."""
         self._running = False
         if self._inotify_fd >= 0:
-            try:
-                os.close(self._inotify_fd)
-            except OSError:
-                pass
+            if libc is not None:
+                try:
+                    os.close(self._inotify_fd)
+                except OSError:
+                    pass
             self._inotify_fd = -1
         self._watch_descriptors.clear()
         self._path_to_wd.clear()

@@ -13,6 +13,7 @@ from backend.app.models.all_models import (
 from backend.app.schemas.schemas import DashboardSummaryResponse
 from backend.app.services.tee_service import tee_service
 from backend.app.api.deps import get_current_admin
+from agent.src.agent import HostMonitoringAgent
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -63,6 +64,15 @@ def get_dashboard_summary(
     if not chart_data:
         chart_data = [{"type": "NO_EVENTS", "count": 0}]
 
+    # Dynamic host telemetry
+    telemetry = HostMonitoringAgent.get_system_telemetry()
+    if agent:
+        telemetry["agent_id"] = agent.agent_id
+        telemetry["status"] = agent.status
+        telemetry["last_heartbeat"] = agent.last_heartbeat.isoformat() if agent.last_heartbeat else None
+        telemetry["monitored_paths_count"] = agent.monitored_paths_count
+        telemetry["events_generated_count"] = agent.events_generated_count
+
     return DashboardSummaryResponse(
         total_monitored_files=total_files,
         files_matching_baseline=matching,
@@ -77,7 +87,8 @@ def get_dashboard_summary(
         last_scan_time=last_verified,
         last_baseline_version=b_version,
         recent_events=recent_events_data,
-        detection_activity_chart=chart_data
+        detection_activity_chart=chart_data,
+        host_telemetry=telemetry
     )
 
 @router.get("/health")
@@ -104,7 +115,9 @@ def get_system_health(db: Session = Depends(get_db)):
             },
             "host_agent": {
                 "status": agent.status if agent else "STANDBY",
-                "last_heartbeat": agent.last_heartbeat.isoformat() if agent else None
+                "hostname": agent.hostname if agent else socket.gethostname(),
+                "last_heartbeat": agent.last_heartbeat.isoformat() if agent else None,
+                "platform": HostMonitoringAgent.get_system_telemetry()["os_platform"]
             },
             "database": {
                 "status": "CONNECTED"

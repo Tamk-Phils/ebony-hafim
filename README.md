@@ -18,36 +18,44 @@ Traditional FIM systems depend directly on the host operating system. If an atta
 
 ```
 [ Host Filesystem (Untrusted) ]
+(Linux: inotify / Windows: Win32 Watcher)
            │
            ▼
-[ Host Monitoring Agent ] ──(inotify + sweep)──> [ FastAPI Backend Control Plane ]
+[ Host Monitoring Agent ] ──(Real-Time + Sweep)──> [ FastAPI Backend Control Plane ]
            │                                                    │
-           │ (AF_VSOCK / Length-Prefixed Frames)                │
+           │ (AF_VSOCK / Secure Socket with Anti-Replay)        │
            ▼                                                    ▼
-[ TEE Comparison Engine (Nitro Enclave) ]             [ React / TypeScript Dashboard ]
-  ├── Autoritative Sealed Baseline (RAM only)           ├── 8 Security Operations Pages
-  ├── Anti-Replay Monotonic Counters                    ├── Live WebSocket Alert Stream
-  └── Enclave Signed Receipts (HMAC/Ed25519)            └── Empirical Benchmarks
+[ TEE Comparison Engine (Nitro Enclave "Locked Office") ]   [ React / TypeScript Dashboard ]
+  ├── Authoritative Sealed Baseline (RAM only)                ├── 8 Security Operations Pages
+  ├── Anti-Replay Monotonic Counters                          ├── Live WebSocket Alert Stream
+  └── Enclave Signed Receipts (HMAC/Ed25519)                  └── Empirical Benchmarks
 ```
+
+### The "Locked Office" Principle
+In simple terms, HA-FIM works like a security officer whose records and decision-making office are locked inside an impenetrable, protected room (the TEE):
+1. **Normal FIM Vulnerability**: An attacker who compromises the operating system or gains root/administrator privileges can manipulate the monitoring agent or its stored fingerprints to hide unauthorized activities.
+2. **Hardware Assistance Isolation**: Sensitive security operations and trusted reference fingerprints are stored in enclave memory, physically isolated from the host operating system.
+3. **Cryptographic Validation**: When a file changes, the monitoring agent transmits its observed SHA-256 fingerprint across the isolated channel to the protected environment, which compares it against the original fingerprint, rejects replayed tokens, and issues an authoritative verdict.
 
 ---
 
 ## Key Features
 
 1. **Tamper-Resistant Authoritative Baseline**: Stored exclusively inside enclave memory; cannot be overwritten by host root or hypervisor attacks.
-2. **Dual-Path TEE Adapter Architecture**:
-   - `DEVELOPMENT_SOFTWARE_ONLY`: Fully operational emulation mode for local testing without cloud fees. Prominently labels results as software-only.
-   - `NITRO_ENCLAVE_HARDWARE`: Connects to AWS Nitro Enclaves over `AF_VSOCK`, validates hardware PCR measurements (PCR0, PCR1, PCR2), and fails safely if the enclave is unavailable (never silently falls back).
-3. **Real Linux Filesystem Agent**: Leverages non-blocking `libc inotify_init1` filesystem events combined with scheduled background reconciliation sweeps to counter dropped events.
+2. **Cross-Platform Host Agent (Linux & Windows)**:
+   - **Linux**: Leverages non-blocking `libc inotify_init1` filesystem event streams.
+   - **Windows**: Leverages native Win32 directory monitoring and differential filesystem scanning.
+   - **Both**: Automated periodic reconciliation sweeps to ensure zero missed events.
+3. **Dual-Path TEE Adapter Architecture**:
+   - `DEVELOPMENT_SOFTWARE_ONLY`: Cross-platform local emulation mode for zero-cost development on Linux, Windows, and macOS.
+   - `NITRO_ENCLAVE_HARDWARE`: Genuine AWS Nitro Enclaves over `AF_VSOCK`, validating hardware PCR measurements (PCR0, PCR1, PCR2).
 4. **Anti-Replay Protection**: Strict monotonic sequence counter validation rejects replayed clean-state tokens.
 5. **Administrative Baseline Approval Workflow**: Sensitive baseline updates require authenticated admin credentials, justification notes, and cryptographic signing.
 6. **Empirical Evaluation Suite**: Real empirical benchmarks measuring SHA-256 calculation latency, TEE communication overhead, throughput, and CPU/RAM footprints with CSV export.
-7. **8-Page Security Operations Dashboard**:
-   - Page 1: Overview Dashboard (Live telemetry & detection activity)
-   - Page 2: Monitored Files (Table, details, verify scan, approve update)
-   - Page 3: Integrity Events (Severity badges, forensic inspection, CSV export)
-   - Page 4: Baseline Management (Revisions, entries inspection, initialization)
-   - Page 5: TEE & Attestation (Platform status, PCRs, remote attestation challenge)
+7. **Enterprise Security Operations Dashboard**:
+   - Institutional SOC dark theme with real platform telemetry (Windows/Linux host metadata).
+   - Interactive real-time enclave architecture visualizer.
+   - Live WebSocket alert notifications and forensic event tables.
    - Page 6: Testing & Verification (10 live automated security scenarios)
    - Page 7: Performance Benchmarks (Empirical throughput & latency charts)
    - Page 8: Audit & Configuration (Privileged audit ledger, parameters)
