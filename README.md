@@ -62,33 +62,44 @@ In simple terms, HA-FIM works like a security officer whose records and decision
 
 ---
 
-## Quick Start (Local Development)
+## Quick Start: Single-Command Launch
 
-### Prerequisites
-- Python 3.10+ (Tested on Python 3.14)
-- Node.js 18+ (Tested on Node.js 24)
-- Linux (x86_64)
+You can launch the entire HA-FIM system (FastAPI Control Plane, TEE Enclave Comparison Engine, Host Monitoring Agent, and Dashboard) with a single command on Linux, macOS, or Windows:
 
-### 1. Backend Setup
+### 1. Unified Single Command (Recommended)
+
 ```bash
-# Set up virtual environment
-python3 -m venv venv
-./venv/bin/pip install -r backend/requirements.txt
+# Linux / macOS:
+./start.sh
 
-# Start backend server
-./venv/bin/uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+# Windows (Command Prompt / Double-Click):
+start.bat
+
+# Windows (PowerShell):
+.\start.ps1
+
+# Universal Python:
+python run.py
 ```
-*Interactive Swagger documentation: `http://127.0.0.1:8000/docs`*
+> The unified starter automatically ensures `.env` exists, checks sandbox target folders, boots the backend, starts the cross-platform file monitoring agent, and serves the dashboard directly on **`http://localhost:8000`** with zero port conflicts.
 
-### 2. Frontend Setup
+### 2. Developer Mode (Hot Reload)
+To run with live backend auto-reload and the Vite frontend development server:
 ```bash
-cd frontend
-npm install
-npm run dev
+./start.sh --dev
+# or
+python run.py --dev
 ```
-*Access web interface: `http://localhost:5173`*
+- Dashboard UI: `http://localhost:5173`
+- Backend API & Enclave: `http://localhost:8000`
+- Interactive API Docs: `http://localhost:8000/docs`
 
-### 3. Default Research Credentials
+### 3. Docker Single Command
+```bash
+docker compose up --build
+```
+
+### 4. Default Demonstration Credentials
 - **Username**: `admin`
 - **Password**: `CyberSecResearch2026!`
 

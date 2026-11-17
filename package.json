@@ -4,6 +4,9 @@
   "description": "Hardware-Assisted File Integrity Monitoring (HA-FIM) using TEEs in Cloud Infrastructure",
   "private": true,
   "scripts": {
+    "start": "python3 run.py",
+    "start:dev": "python3 run.py --dev",
+    "start:win": "python run.py",
     "build": "npm run build --prefix frontend",
     "dev": "npm run dev --prefix frontend",
     "lint": "npm run lint --prefix frontend"
