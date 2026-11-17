@@ -3,6 +3,7 @@ import sys
 import types
 import socket
 import logging
+import asyncio
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 
@@ -36,8 +37,8 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
 from backend.app.database.session import engine, Base, SessionLocal
-from backend.app.models.all_models import Admin, MonitoringTarget, AgentStatusRecord
-from backend.app.core.security import hash_password
+from backend.app.models.all_models import Admin, MonitoringTarget, AgentStatusRecord, Baseline, BaselineEntry, MonitoredFile
+from backend.app.core.security import hash_password, create_access_token
 from backend.app.api.v1 import (
     auth,
     dashboard,
@@ -61,6 +62,13 @@ host_agent: HostMonitoringAgent = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Set WebSocket manager asyncio loop for thread-safe cross-thread event broadcasting
+    try:
+        current_loop = asyncio.get_running_loop()
+        ws_manager.set_loop(current_loop)
+    except Exception:
+        pass
+
     # Startup: 1. Create tables
     Base.metadata.create_all(bind=engine)
     
@@ -121,6 +129,33 @@ async def lifespan(app: FastAPI):
 
         # Sync TEE DB status
         tee_service.sync_db_status(db)
+
+        # Sync active baseline into TEE adapter memory
+        active_baseline = db.query(Baseline).filter(Baseline.is_active == True).order_by(Baseline.version.desc()).first()
+        if active_baseline:
+            entries = db.query(BaselineEntry).filter(BaselineEntry.baseline_id == active_baseline.id).all()
+            if hasattr(tee_service.adapter, "_baseline"):
+                tee_service.adapter._baseline = {
+                    e.file_path: {
+                        "sha256_hash": e.sha256_hash,
+                        "size_bytes": e.size_bytes,
+                        "permissions": e.permissions,
+                        "mtime": 0.0
+                    }
+                    for e in entries
+                }
+                tee_service.adapter._version = active_baseline.version
+        else:
+            # Auto-initialize baseline from current files in active targets on first boot
+            admin = db.query(Admin).first()
+            if admin:
+                token = create_access_token(admin.username)
+                fim_service.initialize_baseline(
+                    db=db,
+                    admin_username=admin.username,
+                    admin_token=token,
+                    notes="Baseline initialized automatically on first boot"
+                )
     finally:
         db.close()
 

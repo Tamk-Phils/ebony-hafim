@@ -219,26 +219,37 @@ class FIMService:
             sequence_no=seq
         )
 
-        # Update MonitoredFile status
+        # Update or create MonitoredFile status
         mon_file = db.query(MonitoredFile).filter(MonitoredFile.file_path == file_path).first()
         if mon_file:
             mon_file.last_observed_hash = observed_hash
             mon_file.permissions = permissions
             mon_file.size_bytes = size_bytes
             mon_file.last_verified_at = datetime.now(timezone.utc)
-
-            if result.verdict == "MATCH":
-                mon_file.integrity_status = "MATCH"
-            elif result.verdict == "TAMPERED":
-                mon_file.integrity_status = "TAMPERED"
-            elif result.verdict == "DELETED":
-                mon_file.integrity_status = "DELETED"
-            elif result.verdict == "PERMISSION_CHANGED":
-                mon_file.integrity_status = "PERMISSION_CHANGED"
-            elif result.verdict == "NEW":
-                mon_file.integrity_status = "NEW"
+            if result.verdict in ("MATCH", "TAMPERED", "DELETED", "PERMISSION_CHANGED", "NEW"):
+                mon_file.integrity_status = result.verdict
             else:
                 mon_file.integrity_status = "UNVERIFIED"
+        else:
+            # Find matching target if any
+            matched_target = None
+            for t in db.query(MonitoringTarget).filter(MonitoringTarget.is_active == True).all():
+                if file_path == t.path or file_path.startswith(t.path + os.sep):
+                    matched_target = t
+                    break
+            mon_file = MonitoredFile(
+                target_id=matched_target.id if matched_target else None,
+                file_path=file_path,
+                file_type="symlink" if os.path.islink(file_path) else "regular",
+                size_bytes=size_bytes,
+                permissions=permissions,
+                expected_hash=result.expected_hash,
+                last_observed_hash=observed_hash,
+                integrity_status=result.verdict if result.verdict in ("MATCH", "TAMPERED", "DELETED", "PERMISSION_CHANGED", "NEW") else "UNVERIFIED",
+                last_verified_at=datetime.now(timezone.utc),
+                baseline_version=0
+            )
+            db.add(mon_file)
 
         # Record Integrity Event if there is an anomaly
         if result.verdict in ("TAMPERED", "NEW", "DELETED", "PERMISSION_CHANGED", "REPLAY_DETECTED", "HARDWARE_UNAVAILABLE"):
@@ -259,40 +270,46 @@ class FIMService:
                 "HARDWARE_UNAVAILABLE": "TEE_ERROR"
             }
 
-            event = IntegrityEvent(
-                event_uuid=str(uuid.uuid4()),
-                file_path=file_path,
-                event_type=event_type_map.get(result.verdict, "BASELINE_VIOLATION"),
-                expected_hash=result.expected_hash,
-                observed_hash=observed_hash,
-                expected_permissions=result.expected_permissions,
-                observed_permissions=permissions,
-                severity=severity_map.get(result.verdict, "HIGH"),
-                status="OPEN",
-                tee_verdict=result.verdict,
-                tee_receipt_sig=result.receipt_signature,
-                tee_sequence=result.sequence_no,
-                source_agent="host-agent-01",
-                details=result.details
-            )
-            db.add(event)
-            db.commit()
+            # Avoid spamming duplicate alerts on reconciliation sweeps if the anomaly is already recorded
+            existing_event = db.query(IntegrityEvent).filter(
+                IntegrityEvent.file_path == file_path,
+                IntegrityEvent.status == "OPEN",
+                IntegrityEvent.tee_verdict == result.verdict,
+                IntegrityEvent.observed_hash == observed_hash
+            ).first()
 
-            # Schedule asynchronous broadcast
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.create_task(ws_manager.broadcast_event({
-                        "id": event.id,
-                        "uuid": event.event_uuid,
-                        "file_path": event.file_path,
-                        "event_type": event.event_type,
-                        "severity": event.severity,
-                        "tee_verdict": event.tee_verdict,
-                        "timestamp": event.timestamp.isoformat()
-                    }))
-            except RuntimeError:
-                pass
+            if not existing_event:
+                event = IntegrityEvent(
+                    event_uuid=str(uuid.uuid4()),
+                    file_path=file_path,
+                    event_type=event_type_map.get(result.verdict, "BASELINE_VIOLATION"),
+                    expected_hash=result.expected_hash,
+                    observed_hash=observed_hash,
+                    expected_permissions=result.expected_permissions,
+                    observed_permissions=permissions,
+                    severity=severity_map.get(result.verdict, "HIGH"),
+                    status="OPEN",
+                    tee_verdict=result.verdict,
+                    tee_receipt_sig=result.receipt_signature,
+                    tee_sequence=result.sequence_no,
+                    source_agent="host-agent-01",
+                    details=result.details
+                )
+                db.add(event)
+                db.commit()
+
+                # Dispatch live WebSocket notification via thread-safe broadcaster
+                ws_manager.broadcast_from_any_thread({
+                    "id": event.id,
+                    "uuid": event.event_uuid,
+                    "file_path": event.file_path,
+                    "event_type": event.event_type,
+                    "severity": event.severity,
+                    "tee_verdict": event.tee_verdict,
+                    "timestamp": event.timestamp.isoformat()
+                })
+            else:
+                db.commit()
         else:
             db.commit()
 
