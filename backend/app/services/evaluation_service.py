@@ -61,7 +61,7 @@ class EvaluationService:
         # 3. Measure End-to-End Verification Latency & TEE Communication Overhead
         t_verify_start = time.perf_counter()
         false_positives = 0
-        seq = 1000
+        seq = getattr(tee_service.adapter, "_last_sequence_seen", 0)
         for p, h in hashes.items():
             seq += 1
             res = tee_service.adapter.verify_file(
